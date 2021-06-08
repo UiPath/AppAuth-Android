@@ -94,30 +94,7 @@ public final class BrowserSelector {
         List<ResolveInfo> resolvedActivityList =
             pm.queryIntentActivities(BROWSER_INTENT, queryFlag);
 
-        // This workaround is needed, because on some older devices no browsers will be found if the opera browser is set as default browser.
-        if (resolvedActivityList.size() == 1 && resolvedActivityList.get(0).activityInfo.packageName.equals("com.opera.browser")) {
-            resolvedActivityList.remove(0);
-
-            // Chrome Beta, Firefox Klar and some other browsers can't be used because of missing custom intent filters (like "googlechrome://...")
-            // Ecosia and Brave are listening for "googlechrome://" scheme
-            if (isPackageInstalled("com.android.chrome", pm) || isPackageInstalled("com.google.android.apps.chrome", pm)
-                || isPackageInstalled("com.ecosia.android", pm) || isPackageInstalled("com.brave.browser", pm)) {
-                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.CHROME, pm, queryFlag);
-                resolvedActivityList.addAll(resolveInfos);
-            }
-            if (isPackageInstalled("com.sec.android.app.sbrowser", pm)) {
-                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.SAMSUNG_INTERNET, pm, queryFlag);
-                resolvedActivityList.addAll(resolveInfos);
-            }
-            if (isPackageInstalled("org.mozilla.firefox", pm)) {
-                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.FIREFOX, pm, queryFlag);
-                resolvedActivityList.addAll(resolveInfos);
-            }
-            if (isPackageInstalled("com.microsoft.emmx", pm)) {
-                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.EDGE, pm, queryFlag);
-                resolvedActivityList.addAll(resolveInfos);
-            }
-        }
+        checkAndHandleOperaWorkaround(pm, queryFlag, resolvedActivityList);
 
         for (ResolveInfo info : resolvedActivityList) {
             // ignore handlers which are not browsers
@@ -160,6 +137,33 @@ public final class BrowserSelector {
         }
 
         return browsers;
+    }
+
+    // This workaround is needed, because on some older devices no browsers will be found if the opera browser is set as default browser.
+    private static void checkAndHandleOperaWorkaround(PackageManager pm, int queryFlag, List<ResolveInfo> resolvedActivityList) {
+        if (resolvedActivityList.size() == 1 && resolvedActivityList.get(0).activityInfo.packageName.equals("com.opera.browser")) {
+            resolvedActivityList.remove(0);
+
+            // Chrome Beta, Firefox Klar and some other browsers can't be used because of missing custom intent filters (like "googlechrome://...")
+            // Ecosia and Brave are listening for "googlechrome://" scheme
+            if (isPackageInstalled("com.android.chrome", pm) || isPackageInstalled("com.google.android.apps.chrome", pm)
+                || isPackageInstalled("com.ecosia.android", pm) || isPackageInstalled("com.brave.browser", pm)) {
+                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.CHROME, pm, queryFlag);
+                resolvedActivityList.addAll(resolveInfos);
+            }
+            if (isPackageInstalled("com.sec.android.app.sbrowser", pm)) {
+                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.SAMSUNG_INTERNET, pm, queryFlag);
+                resolvedActivityList.addAll(resolveInfos);
+            }
+            if (isPackageInstalled("org.mozilla.firefox", pm)) {
+                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.FIREFOX, pm, queryFlag);
+                resolvedActivityList.addAll(resolveInfos);
+            }
+            if (isPackageInstalled("com.microsoft.emmx", pm)) {
+                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.EDGE, pm, queryFlag);
+                resolvedActivityList.addAll(resolveInfos);
+            }
+        }
     }
 
     private static List<ResolveInfo> getResolveInfoListForBrowser(Uri browserUri, PackageManager packageManager, int queryFlag) {
