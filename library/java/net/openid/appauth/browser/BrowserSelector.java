@@ -24,6 +24,7 @@ import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -36,7 +37,7 @@ import java.util.List;
 /**
  * Utility class to obtain the browser package name to be used for
  * {@link net.openid.appauth.AuthorizationService#performAuthorizationRequest(
- * net.openid.appauth.AuthorizationRequest,
+ *net.openid.appauth.AuthorizationRequest,
  * android.app.PendingIntent)} calls. It prioritizes browsers which support
  * [custom tabs](https://developer.chrome.com/multidevice/android/customtabs). To mitigate
  * man-in-the-middle attacks by malicious apps pretending to be browsers for the specific URI we
@@ -45,16 +46,12 @@ import java.util.List;
  */
 public final class BrowserSelector {
 
-    private static final String SCHEME_HTTP = "http";
-    private static final String SCHEME_HTTPS = "https";
-
     /**
      * The service we expect to find on a web browser that indicates it supports custom tabs.
      */
     @VisibleForTesting
     static final String ACTION_CUSTOM_TABS_CONNECTION =
-            CustomTabsService.ACTION_CUSTOM_TABS_CONNECTION;
-
+        CustomTabsService.ACTION_CUSTOM_TABS_CONNECTION;
     /**
      * An arbitrary (but unregistrable, per
      * <a href="https://www.iana.org/domains/reserved">IANA rules</a>) web intent used to query
@@ -62,8 +59,10 @@ public final class BrowserSelector {
      */
     @VisibleForTesting
     static final Intent BROWSER_INTENT = new Intent(
-            Intent.ACTION_VIEW,
-            Uri.parse("http://www.example.com"));
+        Intent.ACTION_VIEW,
+        Uri.parse("http://www.example.com"));
+    private static final String SCHEME_HTTP = "http";
+    private static final String SCHEME_HTTPS = "https";
 
     /**
      * Retrieves the full list of browsers installed on the device. Two entries will exist
@@ -88,12 +87,37 @@ public final class BrowserSelector {
         // Therefore, the preferred browser must be separately determined and the resultant
         // list of browsers reordered to restored this desired property.
         ResolveInfo resolvedDefaultActivity =
-                pm.resolveActivity(BROWSER_INTENT, 0);
+            pm.resolveActivity(BROWSER_INTENT, 0);
         if (resolvedDefaultActivity != null) {
             defaultBrowserPackage = resolvedDefaultActivity.activityInfo.packageName;
         }
         List<ResolveInfo> resolvedActivityList =
-                pm.queryIntentActivities(BROWSER_INTENT, queryFlag);
+            pm.queryIntentActivities(BROWSER_INTENT, queryFlag);
+
+        // This workaround is needed, because on some older devices no browsers will be found if the opera browser is set as default browser.
+        if (resolvedActivityList.size() == 1 && resolvedActivityList.get(0).activityInfo.packageName.equals("com.opera.browser")) {
+            resolvedActivityList.remove(0);
+
+            // Chrome Beta, Firefox Klar and some other browsers can't be used because of missing custom intent filters (like "googlechrome://...")
+            // Ecosia and Brave are listening for "googlechrome://" scheme
+            if (isPackageInstalled("com.android.chrome", pm) || isPackageInstalled("com.google.android.apps.chrome", pm)
+                || isPackageInstalled("com.ecosia.android", pm) || isPackageInstalled("com.brave.browser", pm)) {
+                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.CHROME, pm, queryFlag);
+                resolvedActivityList.addAll(resolveInfos);
+            }
+            if (isPackageInstalled("com.sec.android.app.sbrowser", pm)) {
+                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.SAMSUNG_INTERNET, pm, queryFlag);
+                resolvedActivityList.addAll(resolveInfos);
+            }
+            if (isPackageInstalled("org.mozilla.firefox", pm)) {
+                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.FIREFOX, pm, queryFlag);
+                resolvedActivityList.addAll(resolveInfos);
+            }
+            if (isPackageInstalled("com.microsoft.emmx", pm)) {
+                List<ResolveInfo> resolveInfos = getResolveInfoListForBrowser(BrowserUri.EDGE, pm, queryFlag);
+                resolvedActivityList.addAll(resolveInfos);
+            }
+        }
 
         for (ResolveInfo info : resolvedActivityList) {
             // ignore handlers which are not browsers
@@ -104,12 +128,12 @@ public final class BrowserSelector {
             try {
                 int defaultBrowserIndex = 0;
                 PackageInfo packageInfo = pm.getPackageInfo(
-                        info.activityInfo.packageName,
-                        PackageManager.GET_SIGNATURES);
+                    info.activityInfo.packageName,
+                    PackageManager.GET_SIGNATURES);
 
                 if (hasWarmupService(pm, info.activityInfo.packageName)) {
                     BrowserDescriptor customTabBrowserDescriptor =
-                            new BrowserDescriptor(packageInfo, true);
+                        new BrowserDescriptor(packageInfo, true);
                     if (info.activityInfo.packageName.equals(defaultBrowserPackage)) {
                         // If the default browser is having a WarmupService,
                         // will it be added to the beginning of the list.
@@ -121,7 +145,7 @@ public final class BrowserSelector {
                 }
 
                 BrowserDescriptor fullBrowserDescriptor =
-                        new BrowserDescriptor(packageInfo, false);
+                    new BrowserDescriptor(packageInfo, false);
                 if (info.activityInfo.packageName.equals(defaultBrowserPackage)) {
                     // The default browser is added to the beginning of the list.
                     // If there is support for Custom Tabs, will the one disabling Custom Tabs
@@ -136,6 +160,20 @@ public final class BrowserSelector {
         }
 
         return browsers;
+    }
+
+    private static List<ResolveInfo> getResolveInfoListForBrowser(Uri browserUri, PackageManager packageManager, int queryFlag) {
+        Intent browserIntent = new Intent(Intent.ACTION_VIEW, browserUri);
+        return packageManager.queryIntentActivities(browserIntent, queryFlag);
+    }
+
+    private static boolean isPackageInstalled(String packageName, PackageManager packageManager) {
+        try {
+            packageManager.getPackageInfo(packageName, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
     /**
@@ -182,9 +220,9 @@ public final class BrowserSelector {
     private static boolean isFullBrowser(ResolveInfo resolveInfo) {
         // The filter must match ACTION_VIEW, CATEGORY_BROWSEABLE, and at least one scheme,
         if (resolveInfo.filter == null
-                || !resolveInfo.filter.hasAction(Intent.ACTION_VIEW)
-                || !resolveInfo.filter.hasCategory(Intent.CATEGORY_BROWSABLE)
-                || resolveInfo.filter.schemesIterator() == null) {
+            || !resolveInfo.filter.hasAction(Intent.ACTION_VIEW)
+            || !resolveInfo.filter.hasCategory(Intent.CATEGORY_BROWSABLE)
+            || resolveInfo.filter.schemesIterator() == null) {
             return false;
         }
 
